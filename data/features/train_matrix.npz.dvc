@@ -1,0 +1,5 @@
+outs:
+- md5: 751610d508ed06c0d1fd3bd3e6269ce8
+  size: 10998768
+  hash: md5
+  path: train_matrix.npz

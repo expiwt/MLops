@@ -1,0 +1,5 @@
+outs:
+- md5: 486bbd783ed68d40dd604573dd3f5fde
+  size: 22966143
+  hash: md5
+  path: users_mapping.pkl

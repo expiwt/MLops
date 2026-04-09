@@ -1,0 +1,5 @@
+outs:
+- md5: 95698e0100ddbf764114e591fb3ff7b0
+  size: 345452
+  hash: md5
+  path: items_inv_mapping.pkl
