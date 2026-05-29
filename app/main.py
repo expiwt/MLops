@@ -108,7 +108,6 @@ async def index(request: Request):
 
 def _reload_predictors():
     """Перезагружает модели после переобучения."""
-    global _predictors
     _predictors.clear()
     try:
         _predictors['popular'] = Predictor(model_type='popular')
