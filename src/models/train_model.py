@@ -5,6 +5,12 @@ import logging
 import pandas as pd
 import numpy as np
 import scipy.sparse as sp
+import sys
+from pathlib import Path
+
+# Добавляем корень проекта в sys.path (для прямого запуска через CliRunner)
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 import joblib
 import pickle
 
