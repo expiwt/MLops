@@ -15,9 +15,10 @@ RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
 COPY src/ src/
 COPY app/ app/
 
-# Копируем модели и фичи (для прода — через DVC)
+# Копируем модели, фичи и данные для переобучения
 COPY models/ models/
 COPY data/features/ data/features/
+COPY data/processed/ data/processed/
 
 # Healthcheck — проверяет, что сервис жив
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \

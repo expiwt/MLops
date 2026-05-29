@@ -4,6 +4,9 @@ FastAPI-сервис для рекомендательной системы Kion
 Эндпоинты: /predict, /health, /model-info
 """
 import logging
+import subprocess
+import threading
+import time
 from typing import List, Optional
 from contextlib import asynccontextmanager
 
@@ -103,12 +106,79 @@ async def index(request: Request):
     return HTMLResponse(content=template.render(request=request))
 
 
+# --- Переобучение ---
+
+def _reload_predictors():
+    """Перезагружает модели после переобучения."""
+    global _predictors
+    _predictors.clear()
+    try:
+        _predictors['popular'] = Predictor(model_type='popular')
+    except Exception as e:
+        logger.error(f"Не удалось загрузить PopularRecommender после переобучения: {e}")
+    try:
+        _predictors['tfidf'] = Predictor(model_type='tfidf')
+    except Exception as e:
+        logger.error(f"Не удалось загрузить TFIDFRecommender после переобучения: {e}")
+    logger.info(f"Модели перезагружены. Доступны: {list(_predictors.keys())}")
+
+
+def _run_training():
+    """Запускает обучение моделей в фоне."""
+    project_dir = Path(__file__).resolve().parents[1]
+    processed_path = project_dir / 'data' / 'processed' / 'interactions_processed.csv'
+    features_path = project_dir / 'data' / 'features'
+    models_path = project_dir / 'models'
+
+    logger.info("Запуск переобучения PopularRecommender...")
+    try:
+        subprocess.run([
+            'python', 'src/models/train_model.py',
+            str(processed_path),
+            str(features_path),
+            str(models_path / 'model.pkl'),
+            '--model_type', 'popular'
+        ], cwd=project_dir, check=True, capture_output=True, text=True)
+        logger.info("PopularRecommender обучен")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Ошибка обучения popular: {e.stderr}")
+
+    logger.info("Запуск переобучения TFIDFRecommender...")
+    try:
+        subprocess.run([
+            'python', 'src/models/train_model.py',
+            str(processed_path),
+            str(features_path),
+            str(models_path / 'tfidf.pkl'),
+            '--model_type', 'tfidf'
+        ], cwd=project_dir, check=True, capture_output=True, text=True)
+        logger.info("TFIDFRecommender обучен")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Ошибка обучения tfidf: {e.stderr}")
+
+    _reload_predictors()
+    logger.info("Переобучение завершено")
+
+
 @app.post("/retrain", tags=["System"])
 async def retrain():
-    """Запуск переобучения моделей."""
-    # TODO: реализовать полноценное переобучение
-    logger.info("Запрос на переобучение")
-    return {"message": "Переобучение запущено. Модели будут обновлены через несколько минут."}
+    """Запуск переобучения моделей в фоне."""
+    thread = threading.Thread(target=_run_training, daemon=True)
+    thread.start()
+    logger.info("Запрос на переобучение — запущено в фоне")
+    return {
+        "status": "training_started",
+        "message": "Переобучение запущено в фоне. Модели обновятся через ~1-2 минуты."
+    }
+
+
+@app.get("/retrain/status", tags=["System"])
+async def retrain_status():
+    """Статус переобучения (живы ли текущие модели)."""
+    return {
+        "models": list(_predictors.keys()),
+        "ok": len(_predictors) > 0,
+    }
 
 
 # --- Эндпоинты ---
