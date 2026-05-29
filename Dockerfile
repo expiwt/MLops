@@ -5,12 +5,12 @@ WORKDIR /app
 # Установка системных библиотек (libgomp нужен для implicit/TF-IDF)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
-    python3-setuptools \
     && rm -rf /var/lib/apt/lists/*
 
 # Копируем зависимости + setup.py (для -e . в requirements.txt)
 COPY requirements.txt setup.py .
-RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
+RUN pip install --no-cache-dir setuptools wheel && \
+    pip install --no-cache-dir --prefer-binary -r requirements.txt
 
 # Копируем исходный код
 COPY src/ src/

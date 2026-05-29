@@ -5,10 +5,34 @@ import logging
 import pandas as pd
 import numpy as np
 import scipy.sparse as sp
-import mlflow
-import mlflow.sklearn
 import joblib
 import pickle
+
+# MLflow может не загрузиться без pkg_resources (setuptools)
+try:
+    import mlflow
+    import mlflow.sklearn
+    MLFLOW_AVAILABLE = True
+except ImportError:
+    mlflow = None
+    MLFLOW_AVAILABLE = False
+    print("WARNING: MLflow не загружен (продолжаем без трекинга)")
+    class FakeMLflow:
+        @staticmethod
+        def log_metrics(metrics): pass
+        @staticmethod
+        def log_param(key, value): pass
+        @staticmethod
+        def log_model(model, name, registered_model_name=None): pass
+        @staticmethod
+        def set_experiment(name): pass
+        @staticmethod
+        def start_run(run_name=None):
+            return type('obj', (object,), {'__enter__': lambda s: s, '__exit__': lambda s,*a: None})()
+        class sklearn:
+            @staticmethod
+            def log_model(model, name, registered_model_name=None): pass
+    mlflow = FakeMLflow()
 from pathlib import Path
 from implicit.nearest_neighbours import TFIDFRecommender
 
@@ -22,7 +46,8 @@ from src.models.metrics import compute_metrics
 @click.option('--model_type', default='popular', help='Model type: popular or tfidf')
 def train(processed_data_path, features_path, model_path, model_type):
     logger = logging.getLogger(__name__)
-    mlflow.set_experiment("RecSys_Experiments")
+    if MLFLOW_AVAILABLE:
+        mlflow.set_experiment("RecSys_Experiments")
     
     with mlflow.start_run(run_name=f"Run_{model_type}"):
         # 1. Загрузка данных для валидации
