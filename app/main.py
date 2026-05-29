@@ -4,9 +4,7 @@ FastAPI-сервис для рекомендательной системы Kion
 Эндпоинты: /predict, /health, /model-info
 """
 import logging
-import subprocess
 import threading
-import time
 from typing import List, Optional
 from contextlib import asynccontextmanager
 
@@ -124,37 +122,39 @@ def _reload_predictors():
 
 
 def _run_training():
-    """Запускает обучение моделей в фоне."""
+    """Запускает обучение моделей в том же интерпретаторе (без subprocess)."""
+    from click.testing import CliRunner
+    from src.models.train_model import train as train_command
+
     project_dir = Path(__file__).resolve().parents[1]
     processed_path = project_dir / 'data' / 'processed' / 'interactions_processed.csv'
     features_path = project_dir / 'data' / 'features'
     models_path = project_dir / 'models'
 
     logger.info("Запуск переобучения PopularRecommender...")
-    try:
-        subprocess.run([
-            'python', 'src/models/train_model.py',
-            str(processed_path),
-            str(features_path),
-            str(models_path / 'model.pkl'),
-            '--model_type', 'popular'
-        ], cwd=project_dir, check=True, capture_output=True, text=True)
+    runner = CliRunner()
+    result = runner.invoke(train_command, [
+        str(processed_path),
+        str(features_path),
+        str(models_path / 'model.pkl'),
+        '--model_type', 'popular'
+    ])
+    if result.exit_code == 0:
         logger.info("PopularRecommender обучен")
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Ошибка обучения popular: {e.stderr}")
+    else:
+        logger.error(f"Ошибка обучения popular: {result.output}")
 
     logger.info("Запуск переобучения TFIDFRecommender...")
-    try:
-        subprocess.run([
-            'python', 'src/models/train_model.py',
-            str(processed_path),
-            str(features_path),
-            str(models_path / 'tfidf.pkl'),
-            '--model_type', 'tfidf'
-        ], cwd=project_dir, check=True, capture_output=True, text=True)
+    result = runner.invoke(train_command, [
+        str(processed_path),
+        str(features_path),
+        str(models_path / 'tfidf.pkl'),
+        '--model_type', 'tfidf'
+    ])
+    if result.exit_code == 0:
         logger.info("TFIDFRecommender обучен")
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Ошибка обучения tfidf: {e.stderr}")
+    else:
+        logger.error(f"Ошибка обучения tfidf: {result.output}")
 
     _reload_predictors()
     logger.info("Переобучение завершено")
