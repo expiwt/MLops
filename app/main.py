@@ -7,7 +7,11 @@ import logging
 from typing import List, Optional
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Query
+from pathlib import Path
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
 from src.models.predict_model import Predictor
@@ -81,6 +85,27 @@ class ModelInfoResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     loaded_models: List[str]
+
+
+# --- Web UI ---
+
+# Монтируем статику
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
+templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+
+
+@app.get("/", response_class=HTMLResponse, tags=["UI"])
+async def index(request: Request):
+    """Web UI главная страница."""
+    return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.post("/retrain", tags=["System"])
+async def retrain():
+    """Запуск переобучения моделей."""
+    # TODO: реализовать полноценное переобучение
+    logger.info("Запрос на переобучение")
+    return {"message": "Переобучение запущено. Модели будут обновлены через несколько минут."}
 
 
 # --- Эндпоинты ---

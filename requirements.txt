@@ -10,3 +10,5 @@ fastapi
 uvicorn[standard]
 pydantic
 scikit-learn
+jinja2
+aiofiles
