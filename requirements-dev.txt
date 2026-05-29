@@ -1,9 +1,7 @@
 # dev dependencies — для разработки, линтинга, CI/CD
 -r requirements.txt
 
-Sphinx
-coverage
-awscli
 flake8
-dvc-s3>=3.0.0
 pytest
+coverage
+Sphinx
