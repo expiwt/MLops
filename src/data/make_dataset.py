@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# загрузка сырых данных
 import click
 import logging
 from pathlib import Path

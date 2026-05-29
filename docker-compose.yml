@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  recsys-api:
+    build: .
+    container_name: recsys-api
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+  # Опционально: MLflow для трекинга экспериментов (если нужен локально)
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.11.3
+    container_name: mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/mlflow
+    command: ["mlflow", "server", "--host", "0.0.0.0", "--backend-store-uri", "sqlite:///mlflow/mlflow.db", "--default-artifact-root", "/mlflow/artifacts"]
+
+volumes:
+  mlflow_data:

@@ -1,3 +1,5 @@
+#обучение моделей + MLflow
+
 import click
 import logging
 import pandas as pd

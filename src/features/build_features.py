@@ -1,3 +1,5 @@
+#готовит sparse-матрицу + маппинги для TF-IDF
+
 import click
 import logging
 import pandas as pd
