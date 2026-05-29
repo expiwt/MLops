@@ -11,8 +11,9 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
+
+import jinja2
 
 from src.models.predict_model import Predictor
 
@@ -91,13 +92,15 @@ class HealthResponse(BaseModel):
 
 # Монтируем статику
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
-templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+template_loader = jinja2.FileSystemLoader(searchpath=Path(__file__).parent / "templates")
+template_env = jinja2.Environment(loader=template_loader)
 
 
 @app.get("/", response_class=HTMLResponse, tags=["UI"])
 async def index(request: Request):
     """Web UI главная страница."""
-    return templates.TemplateResponse("index.html", {"request": request})
+    template = template_env.get_template("index.html")
+    return HTMLResponse(content=template.render(request=request))
 
 
 @app.post("/retrain", tags=["System"])
