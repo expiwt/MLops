@@ -1,0 +1,58 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: recsys-api-monitor
+  namespace: recsys
+  labels:
+    app: recsys-api
+    release: kube-prometheus-stack  # для auto-discovery
+spec:
+  selector:
+    matchLabels:
+      app: recsys-api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+  namespaceSelector:
+    matchNames:
+      - recsys
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mlflow-monitor
+  namespace: recsys
+  labels:
+    app: mlflow
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: mlflow
+  endpoints:
+    - port: http
+      interval: 30s
+      scrapeTimeout: 10s
+  namespaceSelector:
+    matchNames:
+      - recsys
+---
+# PodMonitor для прямого сбора метрик (если ServiceMonitor не подходит)
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: recsys-api-podmonitor
+  namespace: recsys
+  labels:
+    app: recsys-api
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: recsys-api
+  podMetricsEndpoints:
+    - port: http-api
+      path: /metrics
+      interval: 15s

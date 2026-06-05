@@ -12,3 +12,4 @@ pydantic
 scikit-learn
 jinja2
 aiofiles
+prometheus-client

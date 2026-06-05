@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Копируем зависимости + setup.py (для -e . в requirements.txt)
-COPY requirements.txt setup.py .
+COPY requirements.txt setup.py ./
 RUN pip install --no-cache-dir -U pip wheel && \
     pip install --no-cache-dir 'setuptools<75' && \
     pip install --no-cache-dir --prefer-binary -r requirements.txt

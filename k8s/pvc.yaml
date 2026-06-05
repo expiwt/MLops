@@ -1,0 +1,40 @@
+# PersistentVolumeClaim для MLflow (хранение экспериментов между рестартами)
+# Для Minikube: стандартный storage-class (kubevirt-hostpath-provisioner)
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-pvc
+  namespace: recsys
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  # В production — использовать fast SSD storage-class
+  # storageClassName: ssd
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: recsys-models-pvc
+  namespace: recsys
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: recsys-data-pvc
+  namespace: recsys
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

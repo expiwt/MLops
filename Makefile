@@ -1,8 +1,22 @@
+.PHONY: run clean data lint requirements k8s-apply k8s-delete k8s-status k8s-watch docker-build-minikube argocd-deploy portainer-deploy portainer-password sync_data_to_s3 sync_data_from_s3
+
+## Run all services via docker-compose
+run:
+	docker compose up --build
+
+## Run all services in background
+run-d:
+	docker compose up --build -d
+
+## Stop all services
+stop:
+	docker compose down
+
 .PHONY: clean data lint requirements sync_data_to_s3 sync_data_from_s3
 
-#################################################################################
-# GLOBALS                                                                       #
-#################################################################################
+
+# GLOBALS                                                                       
+
 
 PROJECT_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 BUCKET = [OPTIONAL] your-bucket-for-syncing-data (do not include 's3://')
@@ -16,9 +30,9 @@ else
 HAS_CONDA=True
 endif
 
-#################################################################################
-# COMMANDS                                                                      #
-#################################################################################
+
+# COMMANDS                                                                      
+
 
 ## Install Python Dependencies
 requirements: test_environment
@@ -76,16 +90,66 @@ endif
 test_environment:
 	$(PYTHON_INTERPRETER) test_environment.py
 
-#################################################################################
-# PROJECT RULES                                                                 #
-#################################################################################
+
+# KUBERNETES                                                                    
+
+
+## Deploy all k8s manifests to current context
+k8s-apply:
+	kubectl apply -f k8s/namespace.yaml
+	kubectl apply -f k8s/configmap.yaml
+	kubectl apply -f k8s/pvc.yaml
+	kubectl apply -f k8s/deployment.yaml
+	kubectl apply -f k8s/ingress.yaml
+	kubectl apply -f k8s/hpa.yaml
+	kubectl apply -f k8s/network-policy.yaml
+	kubectl apply -f k8s/resource-quota.yaml
+	@echo " k8s manifests applied"
+
+## Delete all k8s resources in recsys namespace
+k8s-delete:
+	kubectl delete namespace recsys --ignore-not-found
+	@echo " recsys namespace deleted"
+
+## Get k8s pod status
+k8s-status:
+	@kubectl get all -n recsys
+	@echo "---"
+	@kubectl get hpa -n recsys
+	@echo "---"
+	@kubectl get pvc -n recsys
+
+## Watch k8s pods
+k8s-watch:
+	kubectl get pods -n recsys -w
+
+## Build Docker image for k8s (minikube direct)
+docker-build-minikube:
+	eval $$(minikube -p minikube docker-env) && docker build -t mlops-recsys-api:latest .
+	@echo " Built for minikube"
+
+## Deploy Portainer (k8s web UI)
+portainer-deploy:
+	kubectl apply -f k8s/portainer/deployment.yaml
+	@echo " Portainer deployed"
+	@echo "   HTTP:  http://localhost:9000 (kubectl port-forward -n portainer svc/portainer 9000:9000)"
+	@echo "   NodePort: http://<node-ip>:30000"
+
+## Get Portainer admin password
+portainer-password:
+	@echo "Portainer default admin password: set on first login"
+
+## Deploy ArgoCD app
+argocd-deploy:
+	kubectl apply -f k8s/argocd/application.yaml -n argocd
+
+
+# PROJECT RULES                                                                 
 
 
 
-#################################################################################
-# Self Documenting Commands                                                     #
-#################################################################################
 
+# Self Documenting Commands                                                     
 .DEFAULT_GOAL := help
 
 # Inspired by <http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html>

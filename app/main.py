@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 FastAPI-сервис для рекомендательной системы Kion.
-Эндпоинты: /predict, /health, /model-info
+Эндпоинты: /predict, /health, /model-info, /retrain
+Мониторинг: Prometheus метрики.
 """
 import logging
 import threading
@@ -10,11 +11,15 @@ from contextlib import asynccontextmanager
 
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import Response
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+import time
+
 import jinja2
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, REGISTRY
 
 from src.models.predict_model import Predictor
 
@@ -27,6 +32,35 @@ logger = logging.getLogger(__name__)
 
 # Глобальный предиктор (кешируем загрузку модели)
 _predictors: dict = {}
+
+# --- Prometheus метрики ---
+REQUEST_COUNT = Counter(
+    'recsys_requests_total',
+    'Total number of requests',
+    ['method', 'endpoint', 'status']
+)
+REQUEST_LATENCY = Histogram(
+    'recsys_request_latency_seconds',
+    'Request latency in seconds',
+    ['method', 'endpoint'],
+    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0)
+)
+ACTIVE_REQUESTS = Histogram(
+    'recsys_active_requests',
+    'Number of in-flight requests',
+    buckets=(0, 1, 2, 5, 10, 20, 50)
+)
+
+PREDICTION_COUNTER = Counter(
+    'recsys_predictions_total',
+    'Total number of predictions served',
+    ['model_type']
+)
+MODEL_SCORE_GAUGE = Gauge(
+    'recsys_model_metric',
+    'Метрики модели (MAP, Precision, Recall, Novelty)',
+    ['model_type', 'metric']
+)
 
 
 @asynccontextmanager
@@ -46,6 +80,7 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Не удалось загрузить TFIDFRecommender: {e}")
 
     logger.info(f"Сервис запущен. Доступные модели: {list(_predictors.keys())}")
+
     yield
     _predictors.clear()
 
@@ -53,9 +88,26 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Kion RecSys API",
     description="Рекомендательная система для онлайн-кинотеатра Kion",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
+
+
+# --- Prometheus middleware — собираем метрики на каждый запрос ---
+@app.middleware("http")
+async def metrics_middleware(request: Request, call_next):
+    method = request.method
+    endpoint = request.url.path
+
+    start_time = time.monotonic()
+    response = await call_next(request)
+    latency = time.monotonic() - start_time
+
+    status = str(response.status_code)
+    REQUEST_COUNT.labels(method=method, endpoint=endpoint, status=status).inc()
+    REQUEST_LATENCY.labels(method=method, endpoint=endpoint).observe(latency)
+
+    return response
 
 
 # --- Схемы запросов/ответов ---
@@ -101,7 +153,10 @@ template_env = jinja2.Environment(loader=template_loader)
 async def index(request: Request):
     """Web UI главная страница."""
     template = template_env.get_template("index.html")
-    return HTMLResponse(content=template.render(request=request))
+    return HTMLResponse(content=template.render(
+        request=request,
+        models_available=list(_predictors.keys()),
+    ))
 
 
 # --- Переобучение ---
@@ -182,6 +237,12 @@ async def retrain_status():
 
 # --- Эндпоинты ---
 
+@app.get("/metrics", tags=["System"])
+async def metrics():
+    """Prometheus metrics endpoint."""
+    return Response(content=generate_latest(REGISTRY), media_type="text/plain")
+
+
 @app.get("/health", response_model=HealthResponse, tags=["System"])
 async def health():
     """Проверка работоспособности сервиса."""
@@ -197,7 +258,7 @@ async def model_info():
     return ModelInfoResponse(
         available_models=["popular", "tfidf"],
         loaded_models=list(_predictors.keys()),
-        version="0.1.0",
+        version="0.2.0",
     )
 
 
@@ -228,6 +289,9 @@ async def predict(
     except Exception as e:
         logger.error(f"Ошибка при предсказании для user_id={user_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+    # Счётчик предсказаний
+    PREDICTION_COUNTER.labels(model_type=model_type).inc()
 
     return RecommendResponse(
         user_id=user_id,

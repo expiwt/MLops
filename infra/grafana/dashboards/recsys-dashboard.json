@@ -1,0 +1,73 @@
+{
+  "title": "RecSys API",
+  "uid": "recsys-api",
+  "schemaVersion": 39,
+  "version": 2,
+  "timezone": "browser",
+  "panels": [
+    {
+      "title": " RPS",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(recsys_requests_total[$__rate_interval]))",
+          "legendFormat": "total"
+        }
+      ]
+    },
+    {
+      "title": " Latency (p50 / p95 / p99)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(recsys_request_latency_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(recsys_request_latency_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(recsys_request_latency_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "title": " HTTP Status Codes",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(recsys_requests_total{status=~\"2..\"}[$__rate_interval]))",
+          "legendFormat": "2xx "
+        },
+        {
+          "expr": "sum(rate(recsys_requests_total{status=~\"4..\"}[$__rate_interval]))",
+          "legendFormat": "4xx "
+        },
+        {
+          "expr": "sum(rate(recsys_requests_total{status=~\"5..\"}[$__rate_interval]))",
+          "legendFormat": "5xx "
+        }
+      ]
+    }
+  ]
+}

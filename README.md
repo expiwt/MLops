@@ -1,57 +1,324 @@
-MLops
-==============================
+# 🎬 Kion RecSys — MLOps Project
 
-A short description of the project.
+Рекомендательная система для онлайн-кинотеатра Kion с полным MLOps-циклом:
+от версионирования данных до мониторинга в Kubernetes.
 
-Project Organization
-------------
+## Содержание
 
-    ├── LICENSE
-    ├── Makefile           <- Makefile with commands like `make data` or `make train`
-    ├── README.md          <- The top-level README for developers using this project.
-    ├── data
-    │   ├── external       <- Data from third party sources.
-    │   ├── interim        <- Intermediate data that has been transformed.
-    │   ├── processed      <- The final, canonical data sets for modeling.
-    │   └── raw            <- The original, immutable data dump.
-    │
-    ├── docs               <- A default Sphinx project; see sphinx-doc.org for details
-    │
-    ├── models             <- Trained and serialized models, model predictions, or model summaries
-    │
-    ├── notebooks          <- Jupyter notebooks. Naming convention is a number (for ordering),
-    │                         the creator's initials, and a short `-` delimited description, e.g.
-    │                         `1.0-jqp-initial-data-exploration`.
-    │
-    ├── references         <- Data dictionaries, manuals, and all other explanatory materials.
-    │
-    ├── reports            <- Generated analysis as HTML, PDF, LaTeX, etc.
-    │   └── figures        <- Generated graphics and figures to be used in reporting
-    │
-    ├── requirements.txt   <- The requirements file for reproducing the analysis environment, e.g.
-    │                         generated with `pip freeze > requirements.txt`
-    │
-    ├── setup.py           <- makes project pip installable (pip install -e .) so src can be imported
-    ├── src                <- Source code for use in this project.
-    │   ├── __init__.py    <- Makes src a Python module
-    │   │
-    │   ├── data           <- Scripts to download or generate data
-    │   │   └── make_dataset.py
-    │   │
-    │   ├── features       <- Scripts to turn raw data into features for modeling
-    │   │   └── build_features.py
-    │   │
-    │   ├── models         <- Scripts to train models and then use trained models to make
-    │   │   │                 predictions
-    │   │   ├── predict_model.py
-    │   │   └── train_model.py
-    │   │
-    │   └── visualization  <- Scripts to create exploratory and results oriented visualizations
-    │       └── visualize.py
-    │
-    └── tox.ini            <- tox file with settings for running tox; see tox.readthedocs.io
+- [Архитектура](#архитектура)
+- [Состав проекта](#состав-проекта)
+- [Быстрый старт](#быстрый-старт)
+- [Работа с Kubernetes](#работа-с-kubernetes)
+- [Модели и MLflow](#модели-и-mlflow)
+- [Web UI](#web-ui)
+- [API Endpoints](#api-endpoints)
+- [CI/CD](#cicd)
+- [Покрытие требований курса](#покрытие-требований-курса)
+
+---
+
+## Архитектура
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                    GitHub Actions                         │
+│       Lint → Test → Build Docker → Push to Registry      │
+└───────────────────────┬──────────────────────────────────┘
+                        │ CD (ArgoCD sync)
+                        ▼
+┌──────────────────────────────────────────────────────────┐
+│                    Kubernetes (kind)                      │
+│                                                           │
+│  ┌─────────────┐  ┌──────────┐  ┌──────────┐            │
+│  │  FastAPI     │  │  MLflow  │  │Portainer │            │
+│  │  RecSys API  │  │ Tracking │  │ K8s UI   │            │
+│  │  :8000      │  │ :5000   │  │ :9000   │            │
+│  └──────┬───────┘  └──────────┘  └──────────┘            │
+│         │                                                 │
+│  └──────────────┘                                        │
+└──────────────────────────────────────────────────────────┘
+
+                 ┌ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐
+                  Локально (docker-compose)
+                 │  + Prometheus :9090       │
+                  + Grafana    :3000
+                 └ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘
+```
+
+**Компоненты:**
+
+| Компонент | Назначение |
+|-----------|-----------|
+| **FastAPI сервис** | Выдаёт рекомендации, Web UI |
+| **MLflow** | Трекинг экспериментов, регистрация моделей |
+| **Prometheus / Grafana** | Сбор и визуализация метрик (RPS, latency) |
+| **Portainer** | Веб-интерфейс управления Kubernetes |
+| **Kind** | Локальный Kubernetes-кластер в Docker |
+| **DVC** | Версионирование данных и моделей |
+
+---
+
+## Состав проекта
+
+```
+├── app/                        # ★ FastAPI сервис
+│   ├── main.py                 #  Эндпоинты, Prometheus
+│   └── templates/index.html    #  Web UI (инференс, история)
+│
+├── src/                        # ★ ML код
+│   ├── data/make_dataset.py    #  Загрузка данных
+│   ├── features/               #  Сборка sparse-матриц для TF-IDF
+│   ├── models/
+│   │   ├── train_model.py      #  Обучение (click + MLflow трекинг)
+│   │   ├── predict_model.py    #  Инференс (Predictor класс)
+│   │   ├── baseline.py         #  PopularRecommender
+│   │   └── metrics.py          #  MAP, Precision, Recall, Novelty
+│
+├── k8s/                        # ★ Kubernetes манифесты
+│   ├── namespace.yaml          #  namespace: recsys
+│   ├── deployment.yaml         #  recsys-api + mlflow (deployments + services)
+│   ├── configmap.yaml          #  Конфигурация + secrets
+│   ├── ingress.yaml            #  Внешний доступ
+│   ├── hpa.yaml                #  Автоскалирование
+│   ├── pvc.yaml                #  PersistentVolumeClaims
+│   ├── network-policy.yaml     #  Сетевая изоляция
+│   ├── resource-quota.yaml     #  Квоты
+│   ├── argocd/                 #  ArgoCD Application manifest
+│   ├── prometheus/             #  ServiceMonitor для Prometheus Operator
+│   └── portainer/              #  Portainer (k8s web UI)
+│
+├── infra/                      # ★ Мониторинг (для docker-compose)
+│   ├── prometheus/prometheus.yml
+│   └── grafana/
+│       ├── provisioning/       #  Автоконфиг датасорсов и дашбордов
+│       └── dashboards/         #  JSON-дашборды
+│
+├── tests/                      # ★ Тесты
+│   └── test_predict.py         #  Тесты инференса
+│
+├── data/                       # Данные под DVC
+├── models/                     # Обученные модели под DVC
+├── .github/workflows/ci.yml   # CI/CD
+│
+├── Dockerfile                  # Сборка образа
+├── docker-compose.yml          # Локальный запуск (api + mlflow + prometheus + grafana)
+├── requirements.txt            # Зависимости
+├── Makefile                    # Команды (k8s, portainer)
+└── README.md                   # Эта документация
+```
+
+---
+
+## Быстрый старт
+
+### Локально (docker-compose)
+
+```bash
+cd ~/MLops
+docker compose up --build
+```
+
+| Сервис | Адрес |
+|--------|-------|
+| Web UI / API | http://localhost:8000 |
+| MLflow | http://localhost:5000 |
+| Prometheus | http://localhost:9090 |
+| Grafana | http://localhost:3000 (admin/пароль из docker-compose) |
+
+### Kubernetes (kind)
+
+```bash
+# 1. Создать кластер
+kind create cluster --name recsys
+
+# 2. Собрать и загрузить образы
+docker build -t mlops-recsys-api:latest ~/MLops
+kind load docker-image mlops-recsys-api:latest --name recsys
+# MLflow и Portainer — через containerd внутри kind:
+docker save ghcr.io/mlflow/mlflow:v2.11.3 | docker exec -i recsys-control-plane ctr -n k8s.io images import -
+docker save portainer/portainer-ce:latest | docker exec -i recsys-control-plane ctr -n k8s.io images import -
+
+# 3. Развернуть
+cd ~/MLops
+make k8s-apply
+kubectl apply -f k8s/portainer/deployment.yaml
+
+# 4. Доступ
+kubectl port-forward -n recsys svc/recsys-api 8000:8000   # API
+kubectl port-forward -n recsys svc/mlflow 5000:5000       # MLflow
+kubectl port-forward -n portainer svc/portainer 9000:9000 # Portainer
+```
+
+---
+
+## Работа с Kubernetes
+
+**kind** — это полноценный Kubernetes в Docker. Все манифесты и `kubectl` команды
+идентичны работе с реальным кластером.
+
+### Основные команды
+
+```bash
+# Статус
+kubectl get all -n recsys
+kubectl get pods -n recsys -w      # следить за подами
+kubectl logs -n recsys -l app=recsys-api  # логи сервиса
+
+# Проброс портов (в отдельном терминале)
+kubectl port-forward -n recsys svc/recsys-api 8000:8000
+
+# Тест API
+curl http://localhost:8000/health
+curl -X POST "http://localhost:8000/predict/123?top_k=5&model_type=popular"
+```
+
+### Что развёрнуто
+
+| Компонент | Образ | Ресурсы |
+|-----------|-------|---------|
+| recsys-api | mlops-recsys-api:latest | 256Mi / 1Gi |
+| mlflow | ghcr.io/mlflow/mlflow:v2.11.3 | 128Mi / 512Mi | 
+| portainer | portainer/portainer-ce:latest | 128Mi / 512Mi | 
+
+### ArgoCD
+
+```bash
+kubectl apply -f k8s/argocd/application.yaml
+```
+
+Также возможно развернуть на **Minikube** или любом другом кластере —
+манифесты универсальны.
+
+---
 
 
---------
 
-<p><small>Project based on the <a target="_blank" href="https://drivendata.github.io/cookiecutter-data-science/">cookiecutter data science project template</a>. #cookiecutterdatascience</small></p>
+## Модели и MLflow
+
+### Модели
+
+| Модель | Тип | Описание |
+|--------|-----|----------|
+| **PopularRecommender** | Content-based | Топ популярных фильмов за последние N дней |
+| **TFIDFRecommender** | Collaborative | TF-IDF на user-item матрице, персональные рекомендации |
+
+### Метрики (рассчитываются при обучении)
+
+- **MAP@k** — Mean Average Precision
+- **Precision@k** — точность рекомендаций
+- **Recall@k** — полнота
+- **Novelty** — новизна (насколько рекомендации неочевидны)
+
+### MLflow
+
+Эксперименты логируются в MLflow при каждом обучении:
+
+```bash
+kubectl port-forward -n recsys svc/mlflow 5000:5000
+# → http://localhost:5000
+```
+
+В MLflow сохраняется:
+- Метрики: MAP_10, Precision_10, Recall_10, Novelty_10
+- Параметры: model_algo (popular / tfidf)
+- Модель: registered_model_name (popular_model / tfidf_model)
+
+Модели для инференса загружаются напрямую из `models/*.pkl`, а не через MLflow Registry.
+
+### Переобучение
+
+```bash
+# Через Web UI — кнопка "Запустить переобучение"
+# Через API:
+curl -X POST http://localhost:8000/retrain
+curl http://localhost:8000/retrain/status
+```
+
+---
+
+## Web UI
+
+Доступен по http://localhost:8000:
+
+- **Форма инференса** — ввод user_id, количества рекомендаций, выбор модели
+
+
+- **Статус системы** — загруженные модели
+- **Кнопка переобучения** — запуск retrain
+- **Ссылки** — MLflow, Prometheus, Grafana
+- **Автообновление** — каждые 30 секунд
+
+---
+
+## API Endpoints
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| `GET` | `/` | Web UI |
+| `POST` | `/predict/{user_id}` | Рекомендации (`?top_k=5&model_type=popular`) |
+| `GET` | `/health` | Статус сервиса |
+| `GET` | `/model-info` | Информация о моделях |
+| `GET` | `/metrics` | Prometheus метрики |
+| `POST` | `/retrain` | Запуск переобучения |
+| `GET` | `/retrain/status` | Статус переобучения |
+
+### Пример запроса
+
+```bash
+curl -X POST "http://localhost:8000/predict/123?top_k=5&model_type=popular"
+
+# Ответ:
+{
+  "user_id": 123,
+  "recommendations": [
+    {"item_id": 9728, "rank": 1},
+    {"item_id": 15297, "rank": 2},
+    {"item_id": 10440, "rank": 3},
+    {"item_id": 13865, "rank": 4},
+    {"item_id": 12360, "rank": 5}
+  ],
+  "model_type": "popular"
+}
+```
+
+---
+
+## CI/CD
+
+**GitHub Actions** (`.github/workflows/ci.yml`):
+
+```
+On push/PR → flake8 → pytest → Build Docker → Push to ghcr.io
+```
+
+| Этап | Инструмент |
+|------|-----------|
+| Линтер | flake8 (0 errors) |
+| Тесты | pytest |
+
+| Сборка | Docker Buildx с layer caching |
+| Регистрация | ghcr.io (SHA + branch + latest теги) |
+
+---
+
+## Покрытие требований курса
+
+| № | Требование | Статус |
+|---|-----------|--------|
+| 1 | Датасет, базовая модель | + Kion + PopularRecommender + TFIDFRecommender |
+| 2 | Git + conventional commits + DVC | + |
+| 3 | Cookiecutter-шаблон | + |
+| 4 | MLflow трекинг и регистрация | + |
+| 5 | CI/CD (линтер, тесты, сборка, деплой) | + GitHub Actions |
+| 6 | FastAPI + OpenAPI + Docker + Kubernetes | + Kind с полным набором манифестов |
+| 7 | Prometheus + Grafana | + мониторинг |
+| 8 | — | — |
+| 9 | Web UI | + Инференс, история, retrain |
+| 10 | ArgoCD | + Application manifest |
+| 11 | README | + |
+
+---
+
+## Лицензия
+
+MIT

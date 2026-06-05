@@ -1,0 +1,39 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: recsys-ingress
+  namespace: recsys
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # Для minikube: включить ingress-контроллер
+    # minikube addons enable ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: recsys.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: recsys-api
+                port:
+                  number: 8000
+    - host: mlflow.recsys.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mlflow
+                port:
+                  number: 5000
+  # Опционально: дефолтный бэкенд
+  defaultBackend:
+    service:
+      name: recsys-api
+      port:
+        number: 8000
