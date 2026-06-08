@@ -137,16 +137,18 @@ kind create cluster --name recsys
 # 2. Собрать и загрузить образы
 docker build -t mlops-recsys-api:latest .
 kind load docker-image mlops-recsys-api:latest --name recsys
-# MLflow и Portainer — через containerd внутри kind:
 
-docker pull ghcr.io/mlflow/mlflow:v3.13.0
-docker save ghcr.io/mlflow/mlflow:v3.13.0 | docker exec -i recsys-control-plane ctr -n k8s.io images import -
+docker pull ghcr.io/mlflow/mlflow:v3.12.0
+docker save ghcr.io/mlflow/mlflow:v3.12.0 | docker exec -i recsys-control-plane ctr -n k8s.io images import -
 
-docker pull portainer/portainer-ce:latest
-docker save portainer/portainer-ce:latest | docker exec -i recsys-control-plane ctr -n k8s.io images import -
-
+# Развернуть
 make k8s-apply
-kubectl apply -f k8s/portainer/deployment.yaml
+kubectl apply -f k8s/deployment.yaml
+kubectl get pods -n recsys -w
+
+kubectl port-forward -n recsys svc/recsys-api 8000:8000
+kubectl port-forward -n recsys svc/mlflow 5000:5000
+kubectl port-forward -n portainer svc/portainer 9000:9000
 
 docker save ghcr.io/mlflow/mlflow:v2.11.3 | docker exec -i recsys-control-plane ctr -n k8s.io images import -
 docker save portainer/portainer-ce:latest | docker exec -i recsys-control-plane ctr -n k8s.io images import -
