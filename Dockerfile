@@ -20,7 +20,7 @@ COPY app/ app/
 
 # Копируем .dvc конфиг (для dvc pull в kind)
 COPY .dvc/ .dvc/
-COPY mlflow.db mlflow.db.dvc ./
+COPY mlflow.db.dvc ./
 
 # Копируем модели, фичи и данные для переобучения
 COPY models/ models/
