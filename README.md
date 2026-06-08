@@ -150,37 +150,6 @@ kubectl port-forward -n recsys svc/recsys-api 8000:8000
 kubectl port-forward -n recsys svc/mlflow 5000:5000
 kubectl port-forward -n portainer svc/portainer 9000:9000
 
-docker save ghcr.io/mlflow/mlflow:v2.11.3 | docker exec -i recsys-control-plane ctr -n k8s.io images import -
-docker save portainer/portainer-ce:latest | docker exec -i recsys-control-plane ctr -n k8s.io images import -
-
-# 3. Развернуть
-cd ~/MLops
-make k8s-apply
-kubectl apply -f k8s/portainer/deployment.yaml
-
-# 4. Доступ
-kubectl port-forward -n recsys svc/recsys-api 8000:8000   # API
-kubectl port-forward -n recsys svc/mlflow 5000:5000       # MLflow
-kubectl port-forward -n portainer svc/portainer 9000:9000 # Portainer
-```
-
----
-
-## Работа с Kubernetes
-
-**kind** — это полноценный Kubernetes в Docker. Все манифесты и `kubectl` команды
-идентичны работе с реальным кластером.
-
-### Основные команды
-
-```bash
-# Статус
-kubectl get all -n recsys
-kubectl get pods -n recsys -w      # следить за подами
-kubectl logs -n recsys -l app=recsys-api  # логи сервиса
-
-# Проброс портов (в отдельном терминале)
-kubectl port-forward -n recsys svc/recsys-api 8000:8000
 
 # Тест API
 curl http://localhost:8000/health
