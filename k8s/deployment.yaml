@@ -21,6 +21,55 @@ spec:
         app: recsys-api
         component: api
     spec:
+      initContainers:
+        - name: init-data
+          image: mlops-recsys-api:latest
+          command:
+            - sh
+            - -c
+            - |
+              pip install -q dvc[s3] 2>/dev/null
+              cd /app
+              dvc remote default s3-storage
+              dvc remote modify s3-storage url s3://kion-dvc-storage
+              dvc remote modify s3-storage endpointurl https://storage.yandexcloud.net
+              dvc remote modify s3-storage region ru-central1
+              dvc pull
+              # Копируем mlflow.db туда, где его ждёт MLflow
+              if [ -f /app/mlflow.db ]; then
+                cp /app/mlflow.db /mlflow/mlflow.db
+                echo "mlflow.db скопирован в /mlflow/mlflow.db"
+              else
+                echo "mlflow.db не найден в /app/ — будет создан MLflow при старте"
+              fi
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: recsys-secrets
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: recsys-secrets
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: AWS_DEFAULT_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: recsys-secrets
+                  key: AWS_DEFAULT_REGION
+            - name: AWS_ENDPOINT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: recsys-secrets
+                  key: AWS_ENDPOINT_URL
+          volumeMounts:
+            - name: data-storage
+              mountPath: /app/data
+            - name: models-storage
+              mountPath: /app/models
+            - name: mlflow-storage
+              mountPath: /mlflow
       containers:
         - name: recsys-api
           image: mlops-recsys-api:latest
@@ -29,7 +78,6 @@ spec:
             - containerPort: 8000
               name: http-api
           env:
-            # Из ConfigMap
             - name: LOG_LEVEL
               valueFrom:
                 configMapKeyRef:
@@ -45,16 +93,15 @@ spec:
                 configMapKeyRef:
                   name: recsys-config
                   key: APP_VERSION
-            # Runtime
             - name: PYTHONUNBUFFERED
               value: "1"
           resources:
             requests:
-              memory: "256Mi"
-              cpu: "100m"
+              memory: "512Mi"
+              cpu: "200m"
             limits:
-              memory: "1Gi"
-              cpu: "500m"
+              memory: "2Gi"
+              cpu: "1"
           livenessProbe:
             httpGet:
               path: /health
@@ -77,7 +124,22 @@ spec:
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 5
-            failureThreshold: 30  # до 150 сек на загрузку моделей
+            failureThreshold: 30
+          volumeMounts:
+            - name: data-storage
+              mountPath: /app/data
+            - name: models-storage
+              mountPath: /app/models
+      volumes:
+        - name: data-storage
+          persistentVolumeClaim:
+            claimName: recsys-data-pvc
+        - name: models-storage
+          persistentVolumeClaim:
+            claimName: recsys-models-pvc
+        - name: mlflow-storage
+          persistentVolumeClaim:
+            claimName: mlflow-pvc
 ---
 apiVersion: v1
 kind: Service
@@ -121,7 +183,7 @@ spec:
     spec:
       containers:
         - name: mlflow
-          image: ghcr.io/mlflow/mlflow:v2.11.3
+          image: ghcr.io/mlflow/mlflow:v3.13.0
           ports:
             - containerPort: 5000
               name: http-mlflow
@@ -132,6 +194,8 @@ spec:
             - "0.0.0.0"
             - --port
             - "5000"
+            - --allowed-hosts
+            - "localhost:5000,mlflow:5000"
             - --backend-store-uri
             - sqlite:////mlflow/mlflow.db
             - --default-artifact-root
@@ -151,11 +215,11 @@ spec:
                   optional: true
           resources:
             requests:
-              memory: "128Mi"
-              cpu: "50m"
-            limits:
               memory: "512Mi"
               cpu: "200m"
+            limits:
+              memory: "2Gi"
+              cpu: "1"
           volumeMounts:
             - name: mlflow-storage
               mountPath: /mlflow
@@ -163,7 +227,7 @@ spec:
             httpGet:
               path: /
               port: 5000
-            initialDelaySeconds: 15
+            initialDelaySeconds: 60
             periodSeconds: 30
             timeoutSeconds: 5
           readinessProbe:
