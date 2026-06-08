@@ -116,6 +116,12 @@
 ```bash
 cd ~/MLops
 source venv/bin/activate
+
+# Настройка DVC и загрузка данных
+dvc remote modify --local s3-storage access_key_id "ваш_access_key"
+dvc remote modify --local s3-storage secret_access_key "ваш_secret_key"
+dvc pull
+
 docker-compose up --build
 ```
 
