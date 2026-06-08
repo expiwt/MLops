@@ -11,7 +11,7 @@ services:
 
   # MLflow для трекинга экспериментов
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v3.13.0
+    image: ghcr.io/mlflow/mlflow:v2.11.3
     container_name: mlflow
     ports:
       - "5000:5000"
@@ -19,7 +19,7 @@ services:
       - MLFLOW_ALLOW_DNS_REBINDING=true
     volumes:
       - mlflow_data:/mlflow
-    command: ["mlflow", "server", "--host", "0.0.0.0", "--allowed-hosts", "localhost:5000,mlflow:5000", "--backend-store-uri", "sqlite:///mlflow/mlflow.db", "--default-artifact-root", "/mlflow/artifacts"]
+    command: ["mlflow", "server", "--host", "0.0.0.0", "--backend-store-uri", "sqlite:///mlflow/mlflow.db", "--default-artifact-root", "/mlflow/artifacts"]
 
   # Prometheus — сбор метрик
   prometheus:

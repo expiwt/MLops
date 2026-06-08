@@ -11,11 +11,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt setup.py ./
 RUN pip install --no-cache-dir -U pip wheel && \
     pip install --no-cache-dir 'setuptools<75' && \
-    pip install --no-cache-dir --prefer-binary -r requirements.txt
+    pip install --no-cache-dir --prefer-binary -r requirements.txt && \
+    pip install --no-cache-dir 'dvc[s3]'
 
 # Копируем исходный код
 COPY src/ src/
 COPY app/ app/
+
+# Копируем .dvc конфиг (для dvc pull в kind)
+COPY .dvc/ .dvc/
+COPY mlflow.db mlflow.db.dvc ./
 
 # Копируем модели, фичи и данные для переобучения
 COPY models/ models/

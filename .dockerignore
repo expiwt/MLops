@@ -1,11 +1,11 @@
 venv/
 .git/
-.dvc/
+# .dvc/
 __pycache__/
 *.pyc
 *.pyo
 .env
-mlflow.db
+# mlflow.db
 notebooks/
 reports/
 references/

@@ -21,55 +21,6 @@ spec:
         app: recsys-api
         component: api
     spec:
-      initContainers:
-        - name: init-data
-          image: mlops-recsys-api:latest
-          command:
-            - sh
-            - -c
-            - |
-              pip install -q dvc[s3] 2>/dev/null
-              cd /app
-              dvc remote default s3-storage
-              dvc remote modify s3-storage url s3://kion-dvc-storage
-              dvc remote modify s3-storage endpointurl https://storage.yandexcloud.net
-              dvc remote modify s3-storage region ru-central1
-              dvc pull
-              # Копируем mlflow.db туда, где его ждёт MLflow
-              if [ -f /app/mlflow.db ]; then
-                cp /app/mlflow.db /mlflow/mlflow.db
-                echo "mlflow.db скопирован в /mlflow/mlflow.db"
-              else
-                echo "mlflow.db не найден в /app/ — будет создан MLflow при старте"
-              fi
-          env:
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: recsys-secrets
-                  key: AWS_ACCESS_KEY_ID
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: recsys-secrets
-                  key: AWS_SECRET_ACCESS_KEY
-            - name: AWS_DEFAULT_REGION
-              valueFrom:
-                secretKeyRef:
-                  name: recsys-secrets
-                  key: AWS_DEFAULT_REGION
-            - name: AWS_ENDPOINT_URL
-              valueFrom:
-                secretKeyRef:
-                  name: recsys-secrets
-                  key: AWS_ENDPOINT_URL
-          volumeMounts:
-            - name: data-storage
-              mountPath: /app/data
-            - name: models-storage
-              mountPath: /app/models
-            - name: mlflow-storage
-              mountPath: /mlflow
       containers:
         - name: recsys-api
           image: mlops-recsys-api:latest
@@ -125,21 +76,6 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 5
             failureThreshold: 30
-          volumeMounts:
-            - name: data-storage
-              mountPath: /app/data
-            - name: models-storage
-              mountPath: /app/models
-      volumes:
-        - name: data-storage
-          persistentVolumeClaim:
-            claimName: recsys-data-pvc
-        - name: models-storage
-          persistentVolumeClaim:
-            claimName: recsys-models-pvc
-        - name: mlflow-storage
-          persistentVolumeClaim:
-            claimName: mlflow-pvc
 ---
 apiVersion: v1
 kind: Service
@@ -181,9 +117,22 @@ spec:
         app: mlflow
         component: tracking
     spec:
+      initContainers:
+        - name: copy-mlflow-db
+          image: mlops-recsys-api:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              cp /app/mlflow.db /mlflow/mlflow.db
+              echo "✅ mlflow.db скопирован"
+          volumeMounts:
+            - name: mlflow-storage
+              mountPath: /mlflow
       containers:
         - name: mlflow
-          image: ghcr.io/mlflow/mlflow:v3.13.0
+          image: ghcr.io/mlflow/mlflow:v3.12.0
           ports:
             - containerPort: 5000
               name: http-mlflow
@@ -195,7 +144,7 @@ spec:
             - --port
             - "5000"
             - --allowed-hosts
-            - "localhost:5000,mlflow:5000"
+            - "*"
             - --backend-store-uri
             - sqlite:////mlflow/mlflow.db
             - --default-artifact-root
