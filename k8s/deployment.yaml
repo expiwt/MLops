@@ -125,8 +125,13 @@ spec:
             - sh
             - -c
             - |
-              cp /app/mlflow.db /mlflow/mlflow.db
-              echo "✅ mlflow.db скопирован"
+              if [ -f /app/mlflow.db ]; then
+                cp /app/mlflow.db /mlflow/mlflow.db
+                echo "✅ mlflow.db скопирован из образа"
+              else
+                echo "⚠️ mlflow.db не найден в образе — будет создан пустой"
+                touch /mlflow/mlflow.db
+              fi
           volumeMounts:
             - name: mlflow-storage
               mountPath: /mlflow
