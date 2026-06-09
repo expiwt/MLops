@@ -127,9 +127,9 @@ spec:
             - |
               if [ -f /app/mlflow.db ]; then
                 cp /app/mlflow.db /mlflow/mlflow.db
-                echo "✅ mlflow.db скопирован из образа"
+                echo " mlflow.db скопирован из образа"
               else
-                echo "⚠️ mlflow.db не найден в образе — будет создан пустой"
+                echo " mlflow.db не найден в образе — будет создан пустой"
                 touch /mlflow/mlflow.db
               fi
           volumeMounts:
