@@ -8,12 +8,11 @@
 - [Архитектура](#архитектура)
 - [Состав проекта](#состав-проекта)
 - [Быстрый старт](#быстрый-старт)
-- [Работа с Kubernetes](#работа-с-kubernetes)
+- [Мониторинг (Prometheus + Grafana)](#мониторинг-prometheus--grafana)
 - [Модели и MLflow](#модели-и-mlflow)
 - [Web UI](#web-ui)
 - [API Endpoints](#api-endpoints)
 - [CI/CD](#cicd)
-- [Покрытие требований курса](#покрытие-требований-курса)
 
 ---
 
@@ -26,32 +25,32 @@
 └───────────────────────┬──────────────────────────────────┘
                         │ CD (ArgoCD sync)
                         ▼
-┌──────────────────────────────────────────────────────────┐
-│                    Kubernetes (kind)                      │
-│                                                           │
-│  ┌─────────────┐  ┌──────────┐  ┌──────────┐            │
-│  │  FastAPI     │  │  MLflow  │  │Portainer │            │
-│  │  RecSys API  │  │ Tracking │  │ K8s UI   │            │
-│  │  :8000      │  │ :5000   │  │ :9000   │            │
-│  └──────┬───────┘  └──────────┘  └──────────┘            │
-│         │                                                 │
-│  └──────────────┘                                        │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                    Kubernetes (kind)                               │
+│                                                                   │
+│  ┌─────────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐ │
+│  │  FastAPI     │  │  MLflow  │  │Portainer │  │  Prometheus  │ │
+│  │  RecSys API  │  │ Tracking │  │ K8s UI   │  │  + Grafana   │ │
+│  │  :8000      │  │ :5000   │  │ :9000   │  │  :9090/:3000 │ │
+│  └──────┬───────┘  └──────────┘  └──────────┘  └──────────────┘ │
+│         │                     ns:recsys         ns:monitoring    │
+└──────────────────────────────────────────────────────────────────┘
 
-                 ┌ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐
+                 ┌ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐
                   Локально (docker-compose)
-                 │  + Prometheus :9090       │
+                 │  + Prometheus :9090             │
                   + Grafana    :3000
-                 └ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘
+                 └ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘
 ```
 
 **Компоненты:**
 
 | Компонент | Назначение |
 |-----------|-----------|
-| **FastAPI сервис** | Выдаёт рекомендации, Web UI |
+| **FastAPI сервис** | Выдаёт рекомендации, Web UI, Prometheus метрики |
 | **MLflow** | Трекинг экспериментов, регистрация моделей |
-| **Prometheus / Grafana** | Сбор и визуализация метрик (RPS, latency) |
+| **Prometheus + Grafana** | Сбор метрик (RPS, latency, статус-коды, предсказания, метрики моделей) и визуализация |
+| **kube-prometheus-stack** | Оператор для Prometheus, автоматическое обнаружение ServiceMonitor |
 | **Portainer** | Веб-интерфейс управления Kubernetes |
 | **Kind** | Локальный Kubernetes-кластер в Docker |
 | **DVC** | Версионирование данных и моделей |
@@ -62,8 +61,9 @@
 
 ```
 ├── app/                        # ★ FastAPI сервис
-│   ├── main.py                 #  Эндпоинты, Prometheus
-│   └── templates/index.html    #  Web UI (инференс, история)
+│   ├── main.py                 #  Эндпоинты, Prometheus метрики
+│   ├── templates/index.html    #  Web UI (инференс, история, retrain)
+│   └── static/                 #  Статика для UI
 │
 ├── src/                        # ★ ML код
 │   ├── data/make_dataset.py    #  Загрузка данных
@@ -81,17 +81,17 @@
 │   ├── ingress.yaml            #  Внешний доступ
 │   ├── hpa.yaml                #  Автоскалирование
 │   ├── pvc.yaml                #  PersistentVolumeClaims
-│   ├── network-policy.yaml     #  Сетевая изоляция
+│   ├── network-policy.yaml     #  Сетевая изоляция (доступ для monitoring)
 │   ├── resource-quota.yaml     #  Квоты
 │   ├── argocd/                 #  ArgoCD Application manifest
 │   ├── prometheus/             #  ServiceMonitor для Prometheus Operator
 │   └── portainer/              #  Portainer (k8s web UI)
 │
-├── infra/                      # ★ Мониторинг (для docker-compose)
+├── infra/                      # ★ Дашборды и конфиги мониторинга
 │   ├── prometheus/prometheus.yml
 │   └── grafana/
 │       ├── provisioning/       #  Автоконфиг датасорсов и дашбордов
-│       └── dashboards/         #  JSON-дашборды
+│       └── dashboards/         #  JSON-дашборд RecSys API
 │
 ├── tests/                      # ★ Тесты
 │   └── test_predict.py         #  Тесты инференса
@@ -116,6 +116,7 @@
 ```bash
 cd ~/MLops
 source venv/bin/activate
+pip install "dvc[s3]"
 
 # Настройка DVC и загрузка данных
 dvc remote modify --local s3-storage access_key_id "ваш_access_key"
@@ -147,15 +148,24 @@ kind load docker-image mlops-recsys-api:latest --name recsys
 docker pull ghcr.io/mlflow/mlflow:v3.12.0
 docker save ghcr.io/mlflow/mlflow:v3.12.0 | docker exec -i recsys-control-plane ctr -n k8s.io images import -
 
-# Развернуть
+# 3. Развернуть
 make k8s-apply
 kubectl apply -f k8s/deployment.yaml
 kubectl get pods -n recsys -w
 
+# 4. Порт-форварды
 kubectl port-forward -n recsys svc/recsys-api 8000:8000
 kubectl port-forward -n recsys svc/mlflow 5000:5000
-kubectl port-forward -n portainer svc/portainer 9000:9000
 
+# 5. Мониторинг
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+helm install prometheus-stack prometheus-community/kube-prometheus-stack \
+  --namespace monitoring --create-namespace
+kubectl apply -f k8s/prometheus/
+
+kubectl port-forward -n monitoring svc/prometheus-stack-grafana 3000:80
+kubectl port-forward -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090
 
 # Тест API
 curl http://localhost:8000/health
@@ -166,9 +176,11 @@ curl -X POST "http://localhost:8000/predict/123?top_k=5&model_type=popular"
 
 | Компонент | Образ | Ресурсы |
 |-----------|-------|---------|
-| recsys-api | mlops-recsys-api:latest | 256Mi / 1Gi |
-| mlflow | ghcr.io/mlflow/mlflow:v2.11.3 | 128Mi / 512Mi | 
-| portainer | portainer/portainer-ce:latest | 128Mi / 512Mi | 
+| recsys-api | mlops-recsys-api:latest | 512Mi / 2Gi |
+| mlflow | ghcr.io/mlflow/mlflow:v3.12.0 | 512Mi / 2Gi |
+| portainer | portainer/portainer-ce:latest | 128Mi / 512Mi |
+| prometheus | prometheus-stack-kube-prom:3.12.0 | — |
+| grafana | grafana:11.1.0 | — |
 
 ### ArgoCD
 
@@ -181,7 +193,59 @@ kubectl apply -f k8s/argocd/application.yaml
 
 ---
 
+## Мониторинг (Prometheus + Grafana)
 
+Мониторинг разворачивается через **kube-prometheus-stack** (helm-чарт), который включает Prometheus Operator, Prometheus, AlertManager и Grafana.
+
+**Сбор метрик:**
+
+Сервис отдаёт метрики на `/metrics`. ServiceMonitor в `k8s/prometheus/` автоматически настраивает сбор через Prometheus Operator.
+
+| Метрика | Тип | Описание |
+|---------|-----|----------|
+| `recsys_requests_total` | Counter | Количество запросов (method, endpoint, status) |
+| `recsys_request_latency_seconds` | Histogram | Задержка ответов в секундах |
+| `recsys_predictions_total` | Counter | Количество выданных рекомендаций (model_type) |
+| `recsys_model_metric` | Gauge | Метрики модели: MAP, Precision, Recall, Novelty (model_type, metric) |
+
+**Дашборд Grafana:**
+
+Автоматически импортируется дашборд **RecSys API** (`infra/grafana/dashboards/recsys-dashboard.json`):
+
+| Панель | Показывает |
+|--------|-----------|
+| RPS | Запросов в секунду |
+| Latency | p50 / p95 / p99 времени ответа |
+| HTTP Status Codes | 2xx / 4xx / 5xx |
+| Predictions by Model | Предсказания по моделям (popular vs tfidf) |
+| Model Metrics — Popular | MAP@10, Precision@10, Recall@10, Novelty@10 |
+| Model Metrics — TF-IDF | MAP@10, Precision@10, Recall@10, Novelty@10 |
+
+**Установка мониторинга:**
+
+```bash
+# Установка kube-prometheus-stack
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+helm install prometheus-stack prometheus-community/kube-prometheus-stack \
+  --namespace monitoring --create-namespace
+
+# Применить ServiceMonitor для recsys-api
+kubectl apply -f k8s/prometheus/
+
+# Доступ к Grafana
+kubectl port-forward -n monitoring svc/prometheus-stack-grafana 3000:80
+```
+
+Логин: `admin`, пароль:
+```bash
+kubectl --namespace monitoring get secrets prometheus-stack-grafana \
+  -o jsonpath="{.data.admin-password}" | base64 -d ; echo
+```
+
+Дашборд импортируется в Grafana через API после установки. JSON в `infra/grafana/dashboards/`.
+
+---
 
 ## Модели и MLflow
 
@@ -213,7 +277,7 @@ kubectl port-forward -n recsys svc/mlflow 5000:5000
 - Параметры: model_algo (popular / tfidf)
 - Модель: registered_model_name (popular_model / tfidf_model)
 
-Модели для инференса загружаются напрямую из `models/*.pkl`, а не через MLflow Registry.
+Модели для инференса загружаются напрямую из `models/*.pkl`.
 
 ### Переобучение
 
@@ -224,6 +288,8 @@ curl -X POST http://localhost:8000/retrain
 curl http://localhost:8000/retrain/status
 ```
 
+Результаты переобучения автоматически экспортируются в Prometheus (метрика `recsys_model_metric`) и отображаются в Grafana.
+
 ---
 
 ## Web UI
@@ -231,8 +297,6 @@ curl http://localhost:8000/retrain/status
 Доступен по http://localhost:8000:
 
 - **Форма инференса** — ввод user_id, количества рекомендаций, выбор модели
-
-
 - **Статус системы** — загруженные модели
 - **Кнопка переобучения** — запуск retrain
 - **Ссылки** — MLflow, Prometheus, Grafana
@@ -285,27 +349,8 @@ On push/PR → flake8 → pytest → Build Docker → Push to ghcr.io
 |------|-----------|
 | Линтер | flake8 (0 errors) |
 | Тесты | pytest |
-
 | Сборка | Docker Buildx с layer caching |
 | Регистрация | ghcr.io (SHA + branch + latest теги) |
-
----
-
-## Покрытие требований курса
-
-| № | Требование | Статус |
-|---|-----------|--------|
-| 1 | Датасет, базовая модель | + Kion + PopularRecommender + TFIDFRecommender |
-| 2 | Git + conventional commits + DVC | + |
-| 3 | Cookiecutter-шаблон | + |
-| 4 | MLflow трекинг и регистрация | + |
-| 5 | CI/CD (линтер, тесты, сборка, деплой) | + GitHub Actions |
-| 6 | FastAPI + OpenAPI + Docker + Kubernetes | + Kind с полным набором манифестов |
-| 7 | Prometheus + Grafana | + мониторинг |
-| 8 | — | — |
-| 9 | Web UI | + Инференс, история, retrain |
-| 10 | ArgoCD | + Application manifest |
-| 11 | README | + |
 
 ---
 
