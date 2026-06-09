@@ -2,7 +2,7 @@
   "title": "RecSys API",
   "uid": "recsys-api",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 4,
   "timezone": "browser",
   "panels": [
     {
@@ -66,6 +66,78 @@
         {
           "expr": "sum(rate(recsys_requests_total{status=~\"5..\"}[$__rate_interval]))",
           "legendFormat": "5xx "
+        }
+      ]
+    },
+    {
+      "title": " Predictions by Model",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(recsys_predictions_total{model_type=\"popular\"}[$__rate_interval]))",
+          "legendFormat": "popular"
+        },
+        {
+          "expr": "sum(rate(recsys_predictions_total{model_type=\"tfidf\"}[$__rate_interval]))",
+          "legendFormat": "tfidf"
+        }
+      ]
+    },
+    {
+      "title": " Model Metrics — Popular",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "fieldConfig": {
+        "defaults": {}
+      },
+      "targets": [
+        {
+          "expr": "recsys_model_metric{model_type=\"popular\", metric=\"MAP_10\"}",
+          "legendFormat": "MAP@10"
+        },
+        {
+          "expr": "recsys_model_metric{model_type=\"popular\", metric=\"Precision_10\"}",
+          "legendFormat": "Precision@10"
+        },
+        {
+          "expr": "recsys_model_metric{model_type=\"popular\", metric=\"Recall_10\"}",
+          "legendFormat": "Recall@10"
+        },
+        {
+          "expr": "recsys_model_metric{model_type=\"popular\", metric=\"Novelty_10\"}",
+          "legendFormat": "Novelty@10"
+        }
+      ]
+    },
+    {
+      "title": " Model Metrics — TF-IDF",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "fieldConfig": {
+        "defaults": {}
+      },
+      "targets": [
+        {
+          "expr": "recsys_model_metric{model_type=\"tfidf\", metric=\"MAP_10\"}",
+          "legendFormat": "MAP@10"
+        },
+        {
+          "expr": "recsys_model_metric{model_type=\"tfidf\", metric=\"Precision_10\"}",
+          "legendFormat": "Precision@10"
+        },
+        {
+          "expr": "recsys_model_metric{model_type=\"tfidf\", metric=\"Recall_10\"}",
+          "legendFormat": "Recall@10"
+        },
+        {
+          "expr": "recsys_model_metric{model_type=\"tfidf\", metric=\"Novelty_10\"}",
+          "legendFormat": "Novelty@10"
         }
       ]
     }

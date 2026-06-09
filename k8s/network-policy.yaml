@@ -31,6 +31,14 @@ spec:
               kubernetes.io/metadata.name: prometheus
       ports:
         - port: 8000
+    # Разрешаем Prometheus из kube-prometheus-stack (namespace monitoring)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 8000
+        - port: 5000
   egress:
     # Разрешаем весь исходящий трафик (необходимо для pip install и т.д.)
     - {}

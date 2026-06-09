@@ -175,6 +175,25 @@ def _reload_predictors():
     logger.info(f"Модели перезагружены. Доступны: {list(_predictors.keys())}")
 
 
+def _export_metrics_to_prometheus(output: str, model_type: str):
+    """Парсит stdout обучения и экспортирует метрики в Prometheus."""
+    import re
+    # Ищем: METRICS:model_type:{'MAP_10': ...}
+    match = re.search(rf"METRICS:{model_type}:(\{{.+\}})", output)
+    if match:
+        import ast
+        try:
+            metrics_str = match.group(1)
+            # Заменяем np.float64(...) на обычные числа
+            metrics_str = re.sub(r'np\.float64\((\S+)\)', r'\1', metrics_str)
+            metrics_dict = ast.literal_eval(metrics_str)
+            for metric_name, metric_val in metrics_dict.items():
+                MODEL_SCORE_GAUGE.labels(model_type=model_type, metric=metric_name).set(float(metric_val))
+            logger.info(f"Метрики {model_type} экспортированы в Prometheus: {metrics_dict}")
+        except Exception as e:
+            logger.warning(f"Не удалось распарсить метрики {model_type}: {e}")
+
+
 def _run_training():
     """Запускает обучение моделей в том же интерпретаторе (без subprocess)."""
     from click.testing import CliRunner
@@ -190,11 +209,12 @@ def _run_training():
     result = runner.invoke(train_command, [
         str(processed_path),
         str(features_path),
-        str(models_path / 'model.pkl'),
+        str(models_path / 'popular.pkl'),
         '--model_type', 'popular'
     ])
     if result.exit_code == 0:
         logger.info("PopularRecommender обучен")
+        _export_metrics_to_prometheus(result.output, 'popular')
     else:
         logger.error(f"Ошибка обучения popular: {result.output}")
 
@@ -207,6 +227,7 @@ def _run_training():
     ])
     if result.exit_code == 0:
         logger.info("TFIDFRecommender обучен")
+        _export_metrics_to_prometheus(result.output, 'tfidf')
     else:
         logger.error(f"Ошибка обучения tfidf: {result.output}")
 

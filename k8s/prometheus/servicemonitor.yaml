@@ -5,7 +5,7 @@ metadata:
   namespace: recsys
   labels:
     app: recsys-api
-    release: kube-prometheus-stack  # для auto-discovery
+    release: prometheus-stack  # для auto-discovery
 spec:
   selector:
     matchLabels:
@@ -26,7 +26,7 @@ metadata:
   namespace: recsys
   labels:
     app: mlflow
-    release: kube-prometheus-stack
+    release: prometheus-stack
 spec:
   selector:
     matchLabels:
@@ -47,7 +47,7 @@ metadata:
   namespace: recsys
   labels:
     app: recsys-api
-    release: kube-prometheus-stack
+    release: prometheus-stack
 spec:
   selector:
     matchLabels:

@@ -122,6 +122,9 @@ def train(processed_data_path, features_path, model_path, model_type):
         if MLFLOW_AVAILABLE:
             mlflow.sklearn.log_model(model, "model", registered_model_name=f"{model_type}_model")
 
+        # Печать в stdout для CliRunner (захват метрик)
+        print(f"METRICS:{model_type}:{metrics}")
+
         logger.info(f"Завершено. {model_type} Metrics: {metrics}")
 
 
