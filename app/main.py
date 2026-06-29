@@ -22,6 +22,8 @@ import jinja2
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, REGISTRY
 
 from src.models.predict_model import Predictor
+from src.drift.detector import DriftDetector, DriftReportData
+from src.drift.report import save_report, generate_html, REPORTS_DIR
 
 # Настройка логирования
 logging.basicConfig(
@@ -254,6 +256,114 @@ async def retrain_status():
         "models": list(_predictors.keys()),
         "ok": len(_predictors) > 0,
     }
+
+
+# --- Drift detection ---
+
+_last_drift_report: Optional[DriftReportData] = None
+_drift_running: bool = False
+
+
+def _run_drift_check(train_start: str, train_end: str, test_start: str, test_end: str):
+    """Запуск дрифт-чека в фоне."""
+    global _last_drift_report, _drift_running
+    _drift_running = True
+    try:
+        detector = DriftDetector()
+        report = detector.run_full_check(train_start, train_end, test_start, test_end)
+        save_report(report)
+        _last_drift_report = report
+        logger.info(f"Drift check completed: {report.drift_count} drifts found")
+    except Exception as e:
+        logger.error(f"Drift check failed: {e}")
+        raise
+    finally:
+        _drift_running = False
+
+
+@app.post("/drift/run", tags=["Drift"])
+async def drift_run(
+    train_start: str = Query(default="2021-03-13", description="Start of train period"),
+    train_end: str = Query(default="2021-06-01", description="End of train period"),
+    test_start: str = Query(default="2021-06-01", description="Start of test period"),
+    test_end: str = Query(default="2021-08-23", description="End of test period"),
+):
+    """Запустить дрифт-чек в фоне. Сравнивает два временных периода."""
+    global _drift_running
+    if _drift_running:
+        return {"status": "busy", "message": "Drift check уже выполняется"}
+    thread = threading.Thread(
+        target=_run_drift_check,
+        args=(train_start, train_end, test_start, test_end),
+        daemon=True,
+    )
+    thread.start()
+    return {
+        "status": "started",
+        "message": f"Drift check запущен: train=[{train_start}, {train_end}), test=[{test_start}, {test_end})",
+    }
+
+
+@app.get("/drift/status", tags=["Drift"])
+async def drift_status():
+    """Статус последнего дрифт-чека."""
+    global _last_drift_report, _drift_running
+    if _drift_running:
+        return {"status": "running", "message": "Drift check выполняется..."}
+    if _last_drift_report is None:
+        return {"status": "never_run", "message": "Drift check ещё не запускался"}
+    return {
+        "status": "ok",
+        "has_drift": _last_drift_report.has_any_drift,
+        "drift_count": _last_drift_report.drift_count,
+        "concept_drift": _last_drift_report.concept_drift,
+        "timestamp": _last_drift_report.timestamp,
+        "train_period": list(_last_drift_report.train_period),
+        "test_period": list(_last_drift_report.test_period),
+    }
+
+
+@app.get("/drift/report", tags=["Drift"])
+async def drift_report():
+    """HTML-отчёт последнего дрифт-чека."""
+    global _last_drift_report, _drift_running
+    if _drift_running:
+        return HTMLResponse("<h3>⏳ Drift check выполняется...</h3>")
+    if _last_drift_report is None:
+        return HTMLResponse("<h3>Drift check ещё не запускался</h3>")
+    return HTMLResponse(content=generate_html(_last_drift_report))
+
+
+@app.get("/drift/data", tags=["Drift"])
+async def drift_data():
+    """JSON-данные последнего дрифт-чека."""
+    global _last_drift_report, _drift_running
+    if _last_drift_report is None:
+        return {"status": "never_run"}
+    return _last_drift_report.to_dict()
+
+
+@app.get("/drift/history", tags=["Drift"])
+async def drift_history():
+    """Список всех сохранённых отчётов о дрейфе."""
+    if not REPORTS_DIR.exists():
+        return {"reports": []}
+    files = sorted(REPORTS_DIR.glob("drift_report_*.json"), reverse=True)
+    reports = []
+    for f in files[:20]:
+        try:
+            data = json.loads(f.read_text())
+            reports.append({
+                "filename": f.name,
+                "timestamp": data.get("timestamp", ""),
+                "has_drift": data.get("has_any_drift", False),
+                "drift_count": data.get("drift_count", 0),
+                "train_period": data.get("train_period", []),
+                "test_period": data.get("test_period", []),
+            })
+        except Exception:
+            pass
+    return {"reports": reports}
 
 
 # --- Эндпоинты ---

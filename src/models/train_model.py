@@ -128,6 +128,32 @@ def train(processed_data_path, features_path, model_path, model_type):
         logger.info(f"Завершено. {model_type} Metrics: {metrics}")
 
 
+def evaluate_on_period(df: pd.DataFrame, model_type: str = 'popular', top_N: int = 10) -> dict:
+    """
+    Обучить модель на df (последний день = test), вернуть метрики.
+    Используется для сравнения метрик на разных временных срезах (concept drift).
+    """
+    last_date = df['last_watch_dt'].max()
+    train_df = df[df['last_watch_dt'] < last_date]
+    test_df = df[df['last_watch_dt'] == last_date]
+    users_test = test_df['user_id'].unique()
+
+    if model_type == 'popular':
+        model = PopularRecommender(days=7, dt_column='last_watch_dt')
+        model.fit(train_df)
+        recs_list = model.recommend(users_test, N=top_N)
+        final_users = users_test
+    else:
+        raise ValueError(f"evaluate_on_period не поддерживает {model_type}")
+
+    recs_df = pd.DataFrame({'user_id': final_users, 'item_id': recs_list})
+    recs_df = recs_df.explode('item_id')
+    recs_df['rank'] = recs_df.groupby('user_id').cumcount() + 1
+
+    metrics = compute_metrics(train_df, test_df, recs_df, top_N=top_N)
+    return metrics
+
+
 if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     logging.basicConfig(level=logging.INFO, format=log_fmt)

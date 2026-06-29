@@ -1,0 +1,91 @@
+{
+  "timestamp": "2026-06-29T19:01:38.046218",
+  "train_period": [
+    "2021-03-13",
+    "2021-06-01"
+  ],
+  "test_period": [
+    "2021-06-01",
+    "2021-07-01"
+  ],
+  "has_any_drift": true,
+  "drift_count": 5,
+  "concept_drift": false,
+  "metric_degradation": {
+    "MAP_10": 1.0566,
+    "Novelty_10": -0.2186,
+    "Precision_10": 1.9614,
+    "Recall_10": 3.0305
+  },
+  "data_drifts": [
+    {
+      "feature": "watched_pct",
+      "drift_type": "data_drift",
+      "statistic": 0.06386955521156829,
+      "p_value": 0.0,
+      "threshold": 0.05,
+      "is_drift": true,
+      "ref_mean": 47.5037244359397,
+      "cur_mean": 50.89421471335465,
+      "description": "KS stat=0.0639 p=0.0000 ⚠️ ДРЕЙФ"
+    },
+    {
+      "feature": "total_dur",
+      "drift_type": "data_drift",
+      "statistic": 0.08693850189065189,
+      "p_value": 0.0,
+      "threshold": 0.05,
+      "is_drift": true,
+      "ref_mean": 6649.845956549548,
+      "cur_mean": 10377.80427428274,
+      "description": "KS stat=0.0869 p=0.0000 ⚠️ ДРЕЙФ"
+    },
+    {
+      "feature": "item_id_popularity",
+      "drift_type": "data_drift",
+      "statistic": 0.5245901459549362,
+      "p_value": null,
+      "threshold": 0.1,
+      "is_drift": true,
+      "ref_mean": 0.002319487174884286,
+      "cur_mean": 0.003431322282853021,
+      "description": "JS divergence=0.5246 ⚠️ ДРЕЙФ"
+    },
+    {
+      "feature": "item_id",
+      "drift_type": "data_drift",
+      "statistic": 206095.52229020177,
+      "p_value": 0.0,
+      "threshold": 0.05,
+      "is_drift": true,
+      "ref_mean": 30166.43137254902,
+      "cur_mean": 23508.58823529412,
+      "description": "Chi2 p-value=0.0000 ⚠️ ДРЕЙФ"
+    }
+  ],
+  "target_drifts": [
+    {
+      "feature": "watched_pct (target)",
+      "drift_type": "target_drift",
+      "statistic": 0.06386955521156829,
+      "p_value": 0.0,
+      "threshold": 0.05,
+      "is_drift": true,
+      "ref_mean": 47.5037244359397,
+      "cur_mean": 50.89421471335465,
+      "description": "KS stat=0.0639 p=0.0000 ⚠️ ДРЕЙФ"
+    }
+  ],
+  "metrics_train": {
+    "MAP_10": 0.08345172267538699,
+    "Novelty_10": 4.714843496969939,
+    "Precision_10": 0.025277086631983713,
+    "Recall_10": 0.06770778109332162
+  },
+  "metrics_test": {
+    "MAP_10": 0.17163003960934017,
+    "Novelty_10": 3.6843956052499456,
+    "Precision_10": 0.07485590344024261,
+    "Recall_10": 0.2728963340972156
+  }
+}

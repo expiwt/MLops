@@ -8,15 +8,28 @@
     <style>
         .metric-value { font-size: 1.2rem; font-weight: bold; }
         .history-scroll { max-height: 400px; overflow-y: auto; }
+        .drift-badge { font-size: 0.9rem; padding: 0.35em 0.65em; }
+        .anomaly-flag { cursor: pointer; }
+        .status-ok { color: #198754; }
+        .status-drift { color: #dc3545; font-weight: bold; }
+        .status-warning { color: #ffc107; }
+        #driftAlert { display: none; }
     </style>
 </head>
 <body class="bg-light">
     <div class="container py-4">
         <h1 class="mb-4">🎬 Kion RecSys — MLOps Dashboard</h1>
 
+        <!-- Drift Alert Banner (red when drift, green when clean) -->
+        <div id="driftAlert" class="alert alert-dismissible fade show" role="alert">
+            <span id="driftAlertText"></span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+
         <div class="row">
-            <!-- Левая колонка: форма инференса -->
+            <!-- Левая колонка -->
             <div class="col-md-6 mb-4">
+                <!-- Форма инференса -->
                 <div class="card">
                     <div class="card-header">
                         <h5 class="mb-0">🔍 Получить рекомендации</h5>
@@ -44,7 +57,7 @@
                     </div>
                 </div>
 
-                <!-- Статус моделей -->
+                <!-- Статус системы -->
                 <div class="card mt-3">
                     <div class="card-header">
                         <h5 class="mb-0">📊 Статус системы</h5>
@@ -69,13 +82,65 @@
                 </div>
             </div>
 
-            <!-- Правая колонка: ссылки -->
+            <!-- Правая колонка -->
             <div class="col-md-6 mb-4">
+                <!-- Drift Detection Panel -->
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">⚠️ Drift Detection</h5>
+                        <span id="driftBadge" class="badge bg-secondary drift-badge">—</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="driftStatus">
+                            <p class="text-muted">Загрузка статуса дрифта...</p>
+                        </div>
+                        <button id="driftRunBtn" class="btn btn-outline-danger btn-sm mt-2">
+                            🚀 Запустить проверку дрифта
+                        </button>
+                        <a href="/drift/report" target="_blank" class="btn btn-outline-info btn-sm mt-2" id="driftReportLink" style="display:none;">
+                            📄 Открыть отчёт
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Anomaly Flags -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5 class="mb-0">🚩 Флаги аномалий</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="anomalyFlags">
+                            <p class="text-muted">Запустите проверку дрифта для отображения флагов</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Эксперименты -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5 class="mb-0">🧪 Эксперименты</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm" id="driftHistoryTable">
+                            <thead>
+                                <tr>
+                                    <th>Время</th>
+                                    <th>Дрифт?</th>
+                                    <th>Сигналов</th>
+                                    <th>Период</th>
+                                </tr>
+                            </thead>
+                            <tbody id="driftHistoryBody">
+                                <tr><td colspan="4" class="text-muted">Нет данных</td></tr>
+                            </tbody>
+                        </table>
+                        <small><a href="http://localhost:5000" target="_blank">📋 MLflow Experiments →</a></small>
+                    </div>
+                </div>
+
+                <!-- Ссылки -->
                 <div class="card mt-3">
                     <div class="card-body text-center">
-                        <a href="http://localhost:5000" target="_blank" class="btn btn-outline-info">
-                            📋 MLflow Experiments
-                        </a>
                         <a href="http://localhost:9090" target="_blank" class="btn btn-outline-danger">
                             📊 Prometheus
                         </a>
@@ -112,14 +177,159 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // === API helpers ===
+        async function fetchJSON(url) {
+            const r = await fetch(url);
+            return r.json();
+        }
+
+        // === Drift Status ===
+        async function fetchDriftStatus() {
+            try {
+                const data = await fetchJSON('/drift/status');
+                const badge = document.getElementById('driftBadge');
+                const statusDiv = document.getElementById('driftStatus');
+                const reportLink = document.getElementById('driftReportLink');
+                const anomalyDiv = document.getElementById('anomalyFlags');
+                const alertBox = document.getElementById('driftAlert');
+                const alertText = document.getElementById('driftAlertText');
+
+                if (data.status === 'running') {
+                    badge.textContent = '⏳ Checking...';
+                    badge.className = 'badge bg-warning drift-badge';
+                    statusDiv.innerHTML = '<p class="text-warning">⏳ Проверка дрифта выполняется...</p>';
+                    reportLink.style.display = 'none';
+                    anomalyDiv.innerHTML = '<p class="text-muted">Проверка выполняется...</p>';
+                    driftAlert.style.display = 'none';
+                    return;
+                }
+
+                if (data.status === 'never_run') {
+                    badge.textContent = '—';
+                    badge.className = 'badge bg-secondary drift-badge';
+                    statusDiv.innerHTML = '<p class="text-muted">Drift check ещё не запускался</p>';
+                    reportLink.style.display = 'none';
+                    anomalyDiv.innerHTML = '<p class="text-muted">Запустите проверку дрифта для отображения флагов</p>';
+                    driftAlert.style.display = 'none';
+                    return;
+                }
+
+                if (data.has_drift) {
+                    badge.textContent = `⚠️ ${data.drift_count} дрифтов`;
+                    badge.className = 'badge bg-danger drift-badge';
+                    statusDiv.innerHTML = `
+                        <p class="status-drift">⚠️ Обнаружен дрейф!</p>
+                        <small>Data: ${data.drift_count} сигналов | Concept: ${data.concept_drift ? '⚠️' : '✓'}</small>
+                        <br><small>${data.train_period[0]} → ${data.test_period[1]}</small>
+                    `;
+                    // Alert banner
+                    alertBox.className = 'alert alert-danger alert-dismissible fade show';
+                    alertText.textContent = `⚠️ Обнаружен дрейф: ${data.drift_count} сигналов. Рекомендуется переобучение.`;
+                    driftAlert.style.display = 'block';
+                } else {
+                    badge.textContent = '✅ OK';
+                    badge.className = 'badge bg-success drift-badge';
+                    statusDiv.innerHTML = `
+                        <p class="status-ok">✅ Дрейфа нет</p>
+                        <small>Последняя проверка: ${new Date(data.timestamp).toLocaleString()}</small>
+                        <br><small>${data.train_period[0]} → ${data.test_period[1]}</small>
+                    `;
+                    alertBox.className = 'alert alert-success alert-dismissible fade show';
+                    alertText.textContent = '✅ Дрейфа не обнаружено. Система стабильна.';
+                    driftAlert.style.display = 'block';
+                }
+                reportLink.style.display = 'inline-block';
+            } catch (err) {
+                console.error('Drift status error:', err);
+            }
+        }
+
+        // === Anomaly Flags ===
+        async function fetchAnomalyFlags() {
+            try {
+                const data = await fetchJSON('/drift/data');
+                if (data.status === 'never_run' || !data.data_drifts) {
+                    return;
+                }
+                const div = document.getElementById('anomalyFlags');
+                let html = '<table class="table table-sm mb-0"><thead><tr><th>Признак</th><th>Тип</th><th>Флаг</th></tr></thead><tbody>';
+                data.data_drifts.forEach(d => {
+                    const flag = d.is_drift ? '🚩 ДРЕЙФ' : '✅ OK';
+                    const cls = d.is_drift ? 'table-danger' : 'table-success';
+                    html += `<tr class="${cls}"><td>${d.feature}</td><td>${d.drift_type}</td><td>${flag}</td></tr>`;
+                });
+                data.target_drifts.forEach(d => {
+                    const flag = d.is_drift ? '🚩 ДРЕЙФ' : '✅ OK';
+                    const cls = d.is_drift ? 'table-danger' : 'table-success';
+                    html += `<tr class="${cls}"><td>${d.feature}</td><td>${d.drift_type}</td><td>${flag}</td></tr>`;
+                });
+                html += '</tbody></table>';
+                if (data.concept_drift) {
+                    html += '<p class="text-danger mt-2">🚩 Concept drift: метрики деградировали</p>';
+                }
+                div.innerHTML = html;
+            } catch (err) {
+                console.error('Anomaly flags error:', err);
+            }
+        }
+
+        // === Drift History ===
+        async function fetchDriftHistory() {
+            try {
+                const data = await fetchJSON('/drift/history');
+                const tbody = document.getElementById('driftHistoryBody');
+                if (!data.reports || data.reports.length === 0) {
+                    return;
+                }
+                tbody.innerHTML = data.reports.map(r => `
+                    <tr>
+                        <td><small>${new Date(r.timestamp).toLocaleString()}</small></td>
+                        <td>${r.has_drift ? '⚠️' : '✅'}</td>
+                        <td>${r.drift_count}</td>
+                        <td><small>${r.train_period[0]?.slice(5) || '?'}→${r.test_period[1]?.slice(5) || '?'}</small></td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error('Drift history error:', err);
+            }
+        }
+
+        // === Drift Run ===
+        document.getElementById('driftRunBtn').onclick = async () => {
+            const btn = document.getElementById('driftRunBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Запуск...';
+            try {
+                const res = await fetch('/drift/run', { method: 'POST' });
+                const data = await res.json();
+                btn.textContent = data.status === 'started' ? '✅ Запущено' : '❌ Ошибка';
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.textContent = '🚀 Запустить проверку дрифта';
+                }, 3000);
+                // Poll for completion
+                const poll = setInterval(async () => {
+                    const status = await fetchJSON('/drift/status');
+                    if (status.status !== 'running') {
+                        clearInterval(poll);
+                        await refreshAll();
+                    }
+                }, 2000);
+            } catch (err) {
+                btn.textContent = '❌ Ошибка';
+                btn.disabled = false;
+                setTimeout(() => { btn.textContent = '🚀 Запустить проверку дрифта'; }, 3000);
+            }
+        };
+
+        // === Health ===
         async function fetchHealth() {
             const r = await fetch('/health');
             return r.json();
         }
 
-        // === Update UI ===
         function updateHealth(data) {
             document.getElementById('healthStatus').innerHTML = `
                 <p class="mb-1">✅ Статус: <strong>${data.status}</strong></p>
@@ -127,11 +337,14 @@
             `;
         }
 
-        // === Load all data ===
+        // === Full refresh ===
         async function refreshAll() {
             try {
                 const health = await fetchHealth();
                 updateHealth(health);
+                await fetchDriftStatus();
+                await fetchAnomalyFlags();
+                await fetchDriftHistory();
             } catch (err) {
                 console.error('Refresh error:', err);
             }
@@ -162,16 +375,12 @@
 
                 resultDiv.innerHTML = html;
 
-                // Добавляем в историю
                 const tbody = document.getElementById('historyBody');
                 const time = new Date().toLocaleTimeString();
                 const items = data.recommendations.map(r => `#${r.item_id}`).join(', ');
                 if (tbody.querySelector('td[colspan]')) tbody.innerHTML = '';
                 tbody.innerHTML = `<tr><td>${time}</td><td>${userId}</td><td>${modelType}</td><td>${items}</td></tr>` + tbody.innerHTML;
-
-                // Обновляем статус
                 refreshAll();
-
             } catch (err) {
                 resultDiv.innerHTML = `<div class="alert alert-danger">Ошибка: ${err.message}</div>`;
             }
