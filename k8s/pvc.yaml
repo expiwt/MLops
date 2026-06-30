@@ -1,5 +1,3 @@
-# PersistentVolumeClaim для MLflow (хранение экспериментов между рестартами)
-# Для Minikube: стандартный storage-class (kubevirt-hostpath-provisioner)
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -12,8 +10,6 @@ spec:
   resources:
     requests:
       storage: 5Gi
-  # В production — использовать fast SSD storage-class
-  # storageClassName: ssd
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
