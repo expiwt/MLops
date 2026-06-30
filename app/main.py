@@ -4,6 +4,7 @@ FastAPI-сервис для рекомендательной системы Kion
 Эндпоинты: /predict, /health, /model-info, /retrain
 Мониторинг: Prometheus метрики.
 """
+import json
 import logging
 import threading
 from typing import List, Optional
@@ -289,7 +290,6 @@ async def drift_run(
     test_end: str = Query(default="2021-08-23", description="End of test period"),
 ):
     """Запустить дрифт-чек в фоне. Сравнивает два временных периода."""
-    global _drift_running
     if _drift_running:
         return {"status": "busy", "message": "Drift check уже выполняется"}
     thread = threading.Thread(
@@ -307,7 +307,6 @@ async def drift_run(
 @app.get("/drift/status", tags=["Drift"])
 async def drift_status():
     """Статус последнего дрифт-чека."""
-    global _last_drift_report, _drift_running
     if _drift_running:
         return {"status": "running", "message": "Drift check выполняется..."}
     if _last_drift_report is None:
@@ -326,7 +325,6 @@ async def drift_status():
 @app.get("/drift/report", tags=["Drift"])
 async def drift_report():
     """HTML-отчёт последнего дрифт-чека."""
-    global _last_drift_report, _drift_running
     if _drift_running:
         return HTMLResponse("<h3>⏳ Drift check выполняется...</h3>")
     if _last_drift_report is None:
@@ -337,7 +335,6 @@ async def drift_report():
 @app.get("/drift/data", tags=["Drift"])
 async def drift_data():
     """JSON-данные последнего дрифт-чека."""
-    global _last_drift_report, _drift_running
     if _last_drift_report is None:
         return {"status": "never_run"}
     return _last_drift_report.to_dict()

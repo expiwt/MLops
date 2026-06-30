@@ -7,15 +7,16 @@ DriftDetector — обнаружение data drift, concept drift и target dri
 - Concept drift: сравнение метрик модели на разных временных срезах.
 """
 
-import logging
 import json
+import logging
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass, field, asdict
 
 import numpy as np
 import pandas as pd
-from scipy.stats import ks_2samp, chi2_contingency, entropy
+from scipy.stats import chi2_contingency, entropy, ks_2samp
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +155,8 @@ def _ks_drift(ref: pd.Series, cur: pd.Series,
     threshold = DRIFT_THRESHOLDS["ks_pvalue"]
     ref_clean = ref.dropna()
     cur_clean = cur.dropna()
-    if len(ref_clean) < 10 or len(cur_clean) < 10:
+    if (len(ref_clean) < 10
+        or len(cur_clean) < 10):
         return DriftSignal(
             feature=feature_name, drift_type=drift_type,
             statistic=0.0, p_value=1.0,
@@ -259,8 +261,8 @@ class DriftDetector:
     #  Concept drift (исправленная логика)
     # ──────────────────────────────────────
     def _train_predict_and_evaluate(self, train_df: pd.DataFrame, eval_df: pd.DataFrame,
-                                     model_type: str = "popular",
-                                     top_N: int = 10) -> Dict[str, float]:
+                                    model_type: str = "popular",
+                                    top_N: int = 10) -> Dict[str, float]:
         """
         Обучить модель на train_df, предсказать на eval_df, вернуть метрики.
         eval_df НЕ участвует в обучении — это pure production scenario.
@@ -278,7 +280,10 @@ class DriftDetector:
         # Предсказания этой моделью (без дообучения!)
         recs_list = model.recommend(users_eval, N=top_N)
 
-        recs_df = pd.DataFrame({'user_id': users_eval, 'item_id': recs_list})
+        recs_df = pd.DataFrame({
+            'user_id': users_eval,
+            'item_id': recs_list
+        })
         recs_df = recs_df.explode('item_id')
         recs_df['rank'] = recs_df.groupby('user_id').cumcount() + 1
 
@@ -352,10 +357,10 @@ class DriftDetector:
 
         # Concept drift — обучаем на train_period, предсказываем на test_period
         logger.info("Вычисление concept drift...")
-        concept_drift, metrics_baseline, metrics_production, degradation = \
+        concept_drift, metrics_baseline, metrics_production, degradation = (
             self.check_concept_drift(train_df, test_df)
+        )
 
-        from datetime import datetime
         report = DriftReportData(
             timestamp=datetime.now().isoformat(),
             train_period=(train_start, train_end),
