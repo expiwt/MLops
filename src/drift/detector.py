@@ -155,8 +155,7 @@ def _ks_drift(ref: pd.Series, cur: pd.Series,
     threshold = DRIFT_THRESHOLDS["ks_pvalue"]
     ref_clean = ref.dropna()
     cur_clean = cur.dropna()
-    if (len(ref_clean) < 10
-        or len(cur_clean) < 10):
+    if len(ref_clean) < 10 or len(cur_clean) < 10:  # ✅ исправлено: всё в одну строку
         return DriftSignal(
             feature=feature_name, drift_type=drift_type,
             statistic=0.0, p_value=1.0,
@@ -336,10 +335,8 @@ class DriftDetector:
         logger.info(f"Drift check: train=[{train_start}, {train_end}), "
                     f"test=[{test_start}, {test_end})")
 
-        train_df = self.df[(self.df["last_watch_dt"] >= train_start) &
-                           (self.df["last_watch_dt"] < train_end)].copy()
-        test_df = self.df[(self.df["last_watch_dt"] >= test_start) &
-                          (self.df["last_watch_dt"] < test_end)].copy()
+        train_df = self.df.query("last_watch_dt >= @train_start and last_watch_dt < @train_end").copy()
+        test_df = self.df.query("last_watch_dt >= @test_start and last_watch_dt < @test_end").copy()
 
         logger.info(f"Train: {len(train_df)} rows, Test: {len(test_df)} rows")
 
@@ -357,9 +354,9 @@ class DriftDetector:
 
         # Concept drift — обучаем на train_period, предсказываем на test_period
         logger.info("Вычисление concept drift...")
-        concept_drift, metrics_baseline, metrics_production, degradation = (
-            self.check_concept_drift(train_df, test_df)
-        )
+        concept_drift, metrics_baseline, metrics_production, degradation = self.check_concept_drift(
+            train_df, test_df
+        )  # ✅ исправлено: перенос на предыдущую строку
 
         report = DriftReportData(
             timestamp=datetime.now().isoformat(),
